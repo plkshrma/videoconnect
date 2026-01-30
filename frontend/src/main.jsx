@@ -6,6 +6,7 @@ import App from './App.jsx'
 
 
 // Import your Publishable Key
+//new change
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
 if (!PUBLISHABLE_KEY) {
