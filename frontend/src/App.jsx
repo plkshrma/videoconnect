@@ -1,24 +1,24 @@
-import "./App.css";
-import { SignedOut, SignedIn, SignInButton, SignOutButton, UserButton } from "@clerk/clerk-react";
+import { Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout";
+import Home from "./pages/Home";
+import CreateRoom from "./pages/CreateRoom";
+import VideoCall from "./pages/VideoCall";
 
-function App(){
-
+function App() {
   return (
-    <>
-      <h1>Welcome to the app</h1>
-
-      <SignedOut>
-        <SignInButton mode="modal">
-          <button>Log In</button>
-        </SignInButton>
-        
-      </SignedOut>
-
-      <SignedIn>
-        <SignOutButton />
-        <UserButton />
-      </SignedIn>
-    </>
+    <Routes>
+      <Route path="/" element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route
+          path="create-room"
+          element={<CreateRoom />}
+        />
+        <Route
+          path="call/:callId"
+          element={<VideoCall />}
+        />
+      </Route>
+    </Routes>
   );
 }
 
