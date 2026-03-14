@@ -52,6 +52,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import path from "path";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { serve } from "inngest/express";
@@ -129,6 +130,14 @@ async function start() {
     app.get("/health", (req, res) => {
       res.status(200).json({ msg: "API is up and running" });
     });
+
+    // Serve frontend in production
+    if (process.env.NODE_ENV === "production") {
+      app.use(express.static(path.join(__dirname, "../frontend/dist")));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+      });
+    }
 
     const PORT = process.env.PORT || 3000;
     server.listen(PORT, () => {
