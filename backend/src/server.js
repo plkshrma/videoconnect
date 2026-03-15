@@ -10,6 +10,7 @@ import { Server } from "socket.io";
 import userRoutes from "./routes/userRoutes.js";
 import interviewRoutes from "./routes/interviewRoutes.js";
 import questionRoutes from "./routes/questionRoutes.js";
+import { connectDB } from "./lib/db.js";
 
 dotenv.config();
 
@@ -65,8 +66,7 @@ io.on('connection', (socket) => {
 
 async function start() {
   try {
-    await mongoose.connect(process.env.DB_URL);
-    console.log("✅ MongoDB connected");
+    await connectDB();
 
     // Routes
     app.use("/api/users", userRoutes);
@@ -78,7 +78,12 @@ async function start() {
 
     // Health check
     app.get("/health", (req, res) => {
-      res.status(200).json({ msg: "API is up and running" });
+      const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+      res.status(200).json({
+        msg: "API is up and running",
+        database: dbStatus,
+        environment: process.env.NODE_ENV || "development"
+      });
     });
 
     // Serve frontend in production

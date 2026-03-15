@@ -1,0 +1,20 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "node src/server.js"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+
+[build.env]
+NODE_ENV = "production"
+
+[build.nixpacksPlan.phases.setup]
+nixPkgs = ["nodejs-18_x", "npm-8_x"]
+
+[build.nixpacksPlan.phases.install]
+cmds = ["npm ci"]
+
+[build.nixpacksPlan.phases.build]
+cmds = ["echo 'No build step required'"]

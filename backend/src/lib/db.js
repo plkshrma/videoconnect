@@ -4,13 +4,19 @@ import { ENV } from "./env.js";
 export const connectDB = async () => {
   try {
     if (!ENV.DB_URL) {
-      throw new Error("DB_URL is not defined in environment variables");
+      console.warn("⚠️  DB_URL not configured - skipping database connection");
+      return;
     }
 
     const conn = await mongoose.connect(ENV.DB_URL);
-    console.log("connected to mongoDB:", conn.connection.host);
+    console.log("✅ Connected to MongoDB:", conn.connection.host);
   } catch (error) {
-    console.error("error connecting to mongoDB", error);
-    process.exit(1);
+    console.error("❌ Error connecting to MongoDB:", error.message);
+    // Don't exit process during deployment - allow server to start
+    if (process.env.NODE_ENV === 'production') {
+      console.warn("⚠️  Continuing without database connection");
+    } else {
+      process.exit(1);
+    }
   }
 };
