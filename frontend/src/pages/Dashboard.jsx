@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 
 const Dashboard = () => {
   const [stats, setStats] = useState({

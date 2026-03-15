@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import io from 'socket.io-client';
 
@@ -22,28 +22,7 @@ const VideoCall = () => {
 
   const userId = `user_${Math.random().toString(36).substring(2, 9)}`;
 
-  useEffect(() => {
-    if (isCallActive) {
-      initializeSocket();
-      startCall();
-      intervalRef.current = setInterval(() => {
-        setCallDuration(prev => prev + 1);
-      }, 1000);
-    } else {
-      endCall();
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-  }, [isCallActive]);
-
-  const initializeSocket = () => {
+  const initializeSocket = useCallback(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
     socketRef.current = io(socketUrl);
 
@@ -74,9 +53,27 @@ const VideoCall = () => {
     socketRef.current.on('receive-message', (message) => {
       setMessages(prev => [...prev, message]);
     });
-  };
+  }, [callId, userId, createPeerConnection, handleOffer, handleAnswer, handleIceCandidate]);
 
-  const createPeerConnection = async (remoteUserId) => {
+  const startCall = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: !isVideoOff,
+        audio: !isMuted
+      });
+
+      streamRef.current = stream;
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+    } catch (error) {
+      console.error('Error starting call:', error);
+      alert('Could not access camera/microphone. Please check permissions.');
+      setIsCallActive(false);
+    }
+  }, [isVideoOff, isMuted]);
+
+  const createPeerConnection = useCallback(async (remoteUserId) => {
     peerConnectionRef.current = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
@@ -123,9 +120,9 @@ const VideoCall = () => {
         console.error('Error creating offer:', error);
       }
     }
-  };
+  }, [participants.length, userId]);
 
-  const handleOffer = async (data) => {
+  const handleOffer = useCallback(async (data) => {
     if (data.to === userId) {
       try {
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
@@ -140,9 +137,9 @@ const VideoCall = () => {
         console.error('Error handling offer:', error);
       }
     }
-  };
+  }, [userId]);
 
-  const handleAnswer = async (data) => {
+  const handleAnswer = useCallback(async (data) => {
     if (data.to === userId) {
       try {
         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
@@ -150,9 +147,9 @@ const VideoCall = () => {
         console.error('Error handling answer:', error);
       }
     }
-  };
+  }, [userId]);
 
-  const handleIceCandidate = async (data) => {
+  const handleIceCandidate = useCallback(async (data) => {
     if (data.to === userId && data.candidate) {
       try {
         await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
@@ -160,25 +157,29 @@ const VideoCall = () => {
         console.error('Error adding ICE candidate:', error);
       }
     }
-  };
+  }, [userId]);
 
-  const startCall = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: !isVideoOff,
-        audio: !isMuted
-      });
+  useEffect(() => {
 
-      streamRef.current = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-    } catch (error) {
-      console.error('Error starting call:', error);
-      alert('Could not access camera/microphone. Please check permissions.');
-      setIsCallActive(false);
+    if (isCallActive) {
+      initializeSocket();
+      startCall();
+      intervalRef.current = setInterval(() => {
+        setCallDuration(prev => prev + 1);
+      }, 1000);
+    } else {
+      endCall();
     }
-  };
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
+  }, [isCallActive, initializeSocket, startCall]);
 
   const endCall = () => {
     if (streamRef.current) {
