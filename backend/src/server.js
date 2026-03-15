@@ -88,14 +88,8 @@ async function start() {
       });
     });
 
-    // Serve frontend in production
-    if (process.env.NODE_ENV === "production") {
-      const frontendPath = path.join(process.cwd(), "frontend", "dist");
-      app.use(express.static(frontendPath));
-      app.get("*", (req, res) => {
-        res.sendFile(path.join(frontendPath, "index.html"));
-      });
-    }
+    // Note: Frontend is deployed separately on Vercel/Netlify
+    // No frontend serving needed in backend
 
     const PORT = process.env.PORT || 3000;
     const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
