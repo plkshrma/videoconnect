@@ -3,7 +3,6 @@ import cors from "cors";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { serve } from "inngest/express";
@@ -11,9 +10,6 @@ import { inngest, functions } from "./lib/inngest.js";
 import userRoutes from "./routes/userRoutes.js";
 import interviewRoutes from "./routes/interviewRoutes.js";
 import questionRoutes from "./routes/questionRoutes.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
@@ -87,9 +83,10 @@ async function start() {
 
     // Serve frontend in production
     if (process.env.NODE_ENV === "production") {
-      app.use(express.static(path.join(__dirname, "../frontend/dist")));
+      const frontendPath = path.join(process.cwd(), "frontend", "dist");
+      app.use(express.static(frontendPath));
       app.get("*", (req, res) => {
-        res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+        res.sendFile(path.join(frontendPath, "index.html"));
       });
     }
 
