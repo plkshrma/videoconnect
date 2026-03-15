@@ -5,8 +5,8 @@ import mongoose from "mongoose";
 import path from "path";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import { serve } from "inngest/express";
-import { inngest, functions } from "./lib/inngest.js";
+// import { serve } from "inngest/express";
+// import { inngest, functions } from "./lib/inngest.js";
 import userRoutes from "./routes/userRoutes.js";
 import interviewRoutes from "./routes/interviewRoutes.js";
 import questionRoutes from "./routes/questionRoutes.js";
@@ -73,8 +73,8 @@ async function start() {
     app.use("/api/interviews", interviewRoutes);
     app.use("/api/questions", questionRoutes);
 
-    // Inngest
-    app.use("/api/inngest", serve({ client: inngest, functions }));
+    // Inngest - temporarily disabled for ES module compatibility
+    // app.use("/api/inngest", serve({ client: inngest, functions }));
 
     // Health check
     app.get("/health", (req, res) => {
