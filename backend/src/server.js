@@ -78,11 +78,13 @@ async function start() {
 
     // Health check
     app.get("/health", (req, res) => {
+      console.log(`🔍 Health check called from ${req.ip} at ${new Date().toISOString()}`);
       const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
       res.status(200).json({
         msg: "API is up and running",
         database: dbStatus,
-        environment: process.env.NODE_ENV || "development"
+        environment: process.env.NODE_ENV || "development",
+        timestamp: new Date().toISOString()
       });
     });
 
@@ -96,8 +98,9 @@ async function start() {
     }
 
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
+    const HOST = process.env.NODE_ENV === 'production' ? '0.0.0.0' : 'localhost';
+    server.listen(PORT, HOST, () => {
+      console.log(`✅ Server running on ${HOST}:${PORT}`);
       console.log(`✅ Socket.io ready for video calls`);
     });
   } catch (err) {
