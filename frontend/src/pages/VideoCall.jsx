@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { io } from "socket.io-client";
 
-// ✅ ICE SERVERS (STUN + TURN)
+// ICE SERVERS
 const iceServers = [
   { urls: "stun:stun.l.google.com:19302" },
   {
@@ -11,17 +11,7 @@ const iceServers = [
     credential: "p0ckorjCcrVZQRgM",
   },
   {
-    urls: "turn:global.relay.metered.ca:80?transport=tcp",
-    username: "8b197f766f536b8362d602a9",
-    credential: "p0ckorjCcrVZQRgM",
-  },
-  {
     urls: "turn:global.relay.metered.ca:443",
-    username: "8b197f766f536b8362d602a9",
-    credential: "p0ckorjCcrVZQRgM",
-  },
-  {
-    urls: "turns:global.relay.metered.ca:443?transport=tcp",
     username: "8b197f766f536b8362d602a9",
     credential: "p0ckorjCcrVZQRgM",
   },
@@ -33,17 +23,17 @@ const VideoCall = () => {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const socketRef = useRef(null);
-  const peerConnectionRef = useRef(null);
+  const peerRef = useRef(null);
   const localStreamRef = useRef(null);
 
   const [isCallActive, setIsCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
 
-  const userId = `user_${Math.random().toString(36).substring(2, 8)}`;
+  const userId = Math.random().toString(36).substring(2, 9);
 
   // ---------------- SOCKET ----------------
-  const initializeSocket = () => {
+  const initSocket = () => {
     const socketUrl = import.meta.env.VITE_BACKEND_URL;
 
     socketRef.current = io(socketUrl, {
@@ -51,58 +41,97 @@ const VideoCall = () => {
       withCredentials: true,
     });
 
-    socketRef.current.on("connect", () => {
-      console.log("✅ Connected:", socketRef.current.id);
+    socketRef.current.on("connect", async () => {
+      console.log("Connected:", socketRef.current.id);
 
+      // JOIN ROOM
       socketRef.current.emit("join-room", {
         roomId: callId,
         userId,
       });
+
+      // ALWAYS create peer
+      await createPeer(false);
     });
 
     socketRef.current.on("user-connected", async () => {
-      console.log("👤 Another user joined");
+      console.log("User joined");
 
-      if (!peerConnectionRef.current) {
-        await createPeerConnection(true);
-      }
+      // ONLY one creates offer
+      if (!peerRef.current) return;
+
+      const offer = await peerRef.current.createOffer();
+      await peerRef.current.setLocalDescription(offer);
+
+      socketRef.current.emit("offer", {
+        roomId: callId,
+        offer,
+      });
     });
 
-    socketRef.current.on("offer", handleOffer);
-    socketRef.current.on("answer", handleAnswer);
-    socketRef.current.on("ice-candidate", handleIceCandidate);
+    socketRef.current.on("offer", async (offer) => {
+      console.log("Offer received");
+
+      if (!peerRef.current) {
+        await createPeer(false);
+      }
+
+      await peerRef.current.setRemoteDescription(
+        new RTCSessionDescription(offer)
+      );
+
+      const answer = await peerRef.current.createAnswer();
+      await peerRef.current.setLocalDescription(answer);
+
+      socketRef.current.emit("answer", {
+        roomId: callId,
+        answer,
+      });
+    });
+
+    socketRef.current.on("answer", async (answer) => {
+      console.log("Answer received");
+
+      await peerRef.current.setRemoteDescription(
+        new RTCSessionDescription(answer)
+      );
+    });
+
+    socketRef.current.on("ice-candidate", async (candidate) => {
+      try {
+        await peerRef.current.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
+      } catch (err) {
+        console.error(err);
+      }
+    });
   };
 
   // ---------------- MEDIA ----------------
   const startMedia = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
 
-      localStreamRef.current = stream;
-      localVideoRef.current.srcObject = stream;
-    } catch (err) {
-      console.error("Media error:", err);
-    }
+    localStreamRef.current = stream;
+    localVideoRef.current.srcObject = stream;
   };
 
   // ---------------- PEER ----------------
-  const createPeerConnection = async (isInitiator = false) => {
-    peerConnectionRef.current = new RTCPeerConnection({ iceServers });
-
-    if (!localStreamRef.current) return;
+  const createPeer = async (isInitiator) => {
+    peerRef.current = new RTCPeerConnection({ iceServers });
 
     localStreamRef.current.getTracks().forEach((track) => {
-      peerConnectionRef.current.addTrack(track, localStreamRef.current);
+      peerRef.current.addTrack(track, localStreamRef.current);
     });
 
-    peerConnectionRef.current.ontrack = (event) => {
+    peerRef.current.ontrack = (event) => {
       remoteVideoRef.current.srcObject = event.streams[0];
     };
 
-    peerConnectionRef.current.onicecandidate = (event) => {
+    peerRef.current.onicecandidate = (event) => {
       if (event.candidate) {
         socketRef.current.emit("ice-candidate", {
           roomId: callId,
@@ -110,89 +139,41 @@ const VideoCall = () => {
         });
       }
     };
-
-    if (isInitiator) {
-      const offer = await peerConnectionRef.current.createOffer();
-      await peerConnectionRef.current.setLocalDescription(offer);
-
-      socketRef.current.emit("offer", {
-        roomId: callId,
-        offer,
-      });
-    }
   };
 
-  // ---------------- SIGNALING ----------------
-  const handleOffer = async (offer) => {
-    if (!peerConnectionRef.current) {
-      await createPeerConnection(false);
-    }
-
-    await peerConnectionRef.current.setRemoteDescription(
-      new RTCSessionDescription(offer)
-    );
-
-    const answer = await peerConnectionRef.current.createAnswer();
-    await peerConnectionRef.current.setLocalDescription(answer);
-
-    socketRef.current.emit("answer", {
-      roomId: callId,
-      answer,
-    });
-  };
-
-  const handleAnswer = async (answer) => {
-    await peerConnectionRef.current.setRemoteDescription(
-      new RTCSessionDescription(answer)
-    );
-  };
-
-  const handleIceCandidate = async (candidate) => {
-    try {
-      await peerConnectionRef.current.addIceCandidate(
-        new RTCIceCandidate(candidate)
-      );
-    } catch (err) {
-      console.error("ICE error:", err);
-    }
-  };
-
-  // 🔴 END CALL
+  // ---------------- CONTROLS ----------------
   const endCall = () => {
-    peerConnectionRef.current?.close();
+    peerRef.current?.close();
     socketRef.current?.disconnect();
-    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
     setIsCallActive(false);
   };
 
-  // 🎤 MUTE
   const toggleMute = () => {
-    localStreamRef.current.getAudioTracks().forEach((track) => {
-      track.enabled = !track.enabled;
+    localStreamRef.current.getAudioTracks().forEach((t) => {
+      t.enabled = !t.enabled;
     });
     setIsMuted(!isMuted);
   };
 
-  // 📷 CAMERA
   const toggleVideo = () => {
-    localStreamRef.current.getVideoTracks().forEach((track) => {
-      track.enabled = !track.enabled;
+    localStreamRef.current.getVideoTracks().forEach((t) => {
+      t.enabled = !t.enabled;
     });
     setIsVideoOff(!isVideoOff);
   };
 
-  // ---------------- START CALL ----------------
+  // ---------------- START ----------------
   const startCall = async () => {
     await startMedia();
-    initializeSocket();
+    initSocket();
     setIsCallActive(true);
   };
 
-  // ---------------- CLEANUP ----------------
   useEffect(() => {
     return () => {
       socketRef.current?.disconnect();
-      peerConnectionRef.current?.close();
+      peerRef.current?.close();
     };
   }, []);
 
@@ -201,19 +182,16 @@ const VideoCall = () => {
       <h1>🎥 Video Call</h1>
 
       {!isCallActive && (
-        <button onClick={startCall} style={{ padding: "12px 30px", background: "green", color: "white", borderRadius: "8px" }}>
-          Start Call
-        </button>
+        <button onClick={startCall}>Start Call</button>
       )}
 
-      <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "20px" }}>
-        <video ref={localVideoRef} autoPlay muted playsInline style={{ width: "300px" }} />
-        <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "300px" }} />
+      <div style={{ display: "flex", justifyContent: "center", gap: "20px" }}>
+        <video ref={localVideoRef} autoPlay muted playsInline width="300" />
+        <video ref={remoteVideoRef} autoPlay playsInline width="300" />
       </div>
 
-      {/* ✅ BUTTONS ADDED HERE */}
       {isCallActive && (
-        <div style={{ marginTop: "20px", display: "flex", gap: "15px", justifyContent: "center" }}>
+        <div style={{ marginTop: "20px" }}>
           <button onClick={toggleMute}>
             {isMuted ? "Unmute" : "Mute"}
           </button>
@@ -222,7 +200,10 @@ const VideoCall = () => {
             {isVideoOff ? "Camera On" : "Camera Off"}
           </button>
 
-          <button onClick={endCall} style={{ background: "red", color: "white" }}>
+          <button
+            onClick={endCall}
+            style={{ background: "red", color: "white" }}
+          >
             End Call
           </button>
         </div>
