@@ -4,9 +4,7 @@ import { io } from "socket.io-client";
 
 // ✅ ICE SERVERS (STUN + TURN)
 const iceServers = [
-  {
-    urls: "stun:stun.l.google.com:19302",
-  },
+  { urls: "stun:stun.l.google.com:19302" },
   {
     urls: "turn:global.relay.metered.ca:80",
     username: "8b197f766f536b8362d602a9",
@@ -39,6 +37,8 @@ const VideoCall = () => {
   const localStreamRef = useRef(null);
 
   const [isCallActive, setIsCallActive] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
 
   const userId = `user_${Math.random().toString(36).substring(2, 8)}`;
 
@@ -71,10 +71,6 @@ const VideoCall = () => {
     socketRef.current.on("offer", handleOffer);
     socketRef.current.on("answer", handleAnswer);
     socketRef.current.on("ice-candidate", handleIceCandidate);
-
-    socketRef.current.on("disconnect", () => {
-      console.log("❌ Socket disconnected");
-    });
   };
 
   // ---------------- MEDIA ----------------
@@ -86,10 +82,7 @@ const VideoCall = () => {
       });
 
       localStreamRef.current = stream;
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+      localVideoRef.current.srcObject = stream;
     } catch (err) {
       console.error("Media error:", err);
     }
@@ -131,8 +124,6 @@ const VideoCall = () => {
 
   // ---------------- SIGNALING ----------------
   const handleOffer = async (offer) => {
-    console.log("📩 Offer received");
-
     if (!peerConnectionRef.current) {
       await createPeerConnection(false);
     }
@@ -151,8 +142,6 @@ const VideoCall = () => {
   };
 
   const handleAnswer = async (answer) => {
-    console.log("📩 Answer received");
-
     await peerConnectionRef.current.setRemoteDescription(
       new RTCSessionDescription(answer)
     );
@@ -168,6 +157,30 @@ const VideoCall = () => {
     }
   };
 
+  // 🔴 END CALL
+  const endCall = () => {
+    peerConnectionRef.current?.close();
+    socketRef.current?.disconnect();
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    setIsCallActive(false);
+  };
+
+  // 🎤 MUTE
+  const toggleMute = () => {
+    localStreamRef.current.getAudioTracks().forEach((track) => {
+      track.enabled = !track.enabled;
+    });
+    setIsMuted(!isMuted);
+  };
+
+  // 📷 CAMERA
+  const toggleVideo = () => {
+    localStreamRef.current.getVideoTracks().forEach((track) => {
+      track.enabled = !track.enabled;
+    });
+    setIsVideoOff(!isVideoOff);
+  };
+
   // ---------------- START CALL ----------------
   const startCall = async () => {
     await startMedia();
@@ -178,8 +191,8 @@ const VideoCall = () => {
   // ---------------- CLEANUP ----------------
   useEffect(() => {
     return () => {
-      if (socketRef.current) socketRef.current.disconnect();
-      if (peerConnectionRef.current) peerConnectionRef.current.close();
+      socketRef.current?.disconnect();
+      peerConnectionRef.current?.close();
     };
   }, []);
 
@@ -188,44 +201,32 @@ const VideoCall = () => {
       <h1>🎥 Video Call</h1>
 
       {!isCallActive && (
-        <button
-          onClick={startCall}
-          style={{
-            padding: "12px 30px",
-            background: "green",
-            color: "white",
-            fontSize: "18px",
-            border: "none",
-            borderRadius: "8px",
-          }}
-        >
+        <button onClick={startCall} style={{ padding: "12px 30px", background: "green", color: "white", borderRadius: "8px" }}>
           Start Call
         </button>
       )}
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          gap: "20px",
-          marginTop: "20px",
-        }}
-      >
-        <video
-          ref={localVideoRef}
-          autoPlay
-          muted
-          playsInline
-          style={{ width: "300px", borderRadius: "10px" }}
-        />
-
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          style={{ width: "300px", borderRadius: "10px" }}
-        />
+      <div style={{ display: "flex", justifyContent: "center", gap: "20px", marginTop: "20px" }}>
+        <video ref={localVideoRef} autoPlay muted playsInline style={{ width: "300px" }} />
+        <video ref={remoteVideoRef} autoPlay playsInline style={{ width: "300px" }} />
       </div>
+
+      {/* ✅ BUTTONS ADDED HERE */}
+      {isCallActive && (
+        <div style={{ marginTop: "20px", display: "flex", gap: "15px", justifyContent: "center" }}>
+          <button onClick={toggleMute}>
+            {isMuted ? "Unmute" : "Mute"}
+          </button>
+
+          <button onClick={toggleVideo}>
+            {isVideoOff ? "Camera On" : "Camera Off"}
+          </button>
+
+          <button onClick={endCall} style={{ background: "red", color: "white" }}>
+            End Call
+          </button>
+        </div>
+      )}
     </div>
   );
 };
