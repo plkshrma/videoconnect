@@ -25,12 +25,11 @@ const VideoCall = () => {
   const socketRef = useRef(null);
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
+  const userIdRef = useRef(Math.random().toString(36).substring(2, 9));
 
   const [isCallActive, setIsCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-
-  const userId = Math.random().toString(36).substring(2, 9);
 
   // ---------------- SOCKET ----------------
   const initSocket = () => {
@@ -47,11 +46,11 @@ const VideoCall = () => {
       // JOIN ROOM
       socketRef.current.emit("join-room", {
         roomId: callId,
-        userId,
+        userId: userIdRef.current,
       });
 
       // ALWAYS create peer
-      await createPeer(false);
+      await createPeer();
     });
 
     socketRef.current.on("user-connected", async () => {
@@ -73,7 +72,7 @@ const VideoCall = () => {
       console.log("Offer received");
 
       if (!peerRef.current) {
-        await createPeer(false);
+        await createPeer();
       }
 
       await peerRef.current.setRemoteDescription(
@@ -91,6 +90,7 @@ const VideoCall = () => {
 
     socketRef.current.on("answer", async (answer) => {
       console.log("Answer received");
+      if (!peerRef.current) return;
 
       await peerRef.current.setRemoteDescription(
         new RTCSessionDescription(answer)
@@ -99,6 +99,7 @@ const VideoCall = () => {
 
     socketRef.current.on("ice-candidate", async (candidate) => {
       try {
+        if (!peerRef.current) return;
         await peerRef.current.addIceCandidate(
           new RTCIceCandidate(candidate)
         );
@@ -120,7 +121,7 @@ const VideoCall = () => {
   };
 
   // ---------------- PEER ----------------
-  const createPeer = async (isInitiator) => {
+  const createPeer = async () => {
     peerRef.current = new RTCPeerConnection({ iceServers });
 
     localStreamRef.current.getTracks().forEach((track) => {

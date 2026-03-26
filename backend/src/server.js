@@ -53,7 +53,8 @@ app.use(
 io.on("connection", (socket) => {
   console.log("🔌 User connected:", socket.id);
 
-  socket.on("join-room", (roomId, userId) => {
+  socket.on("join-room", ({ roomId, userId }) => {
+    if (!roomId) return;
     socket.join(roomId);
     console.log(`👤 ${userId} joined room ${roomId}`);
 
@@ -62,17 +63,17 @@ io.on("connection", (socket) => {
 
     // OFFER
     socket.on("offer", (data) => {
-      socket.to(roomId).emit("offer", data);
+      socket.to(data.roomId).emit("offer", data.offer);
     });
 
     // ANSWER
     socket.on("answer", (data) => {
-      socket.to(roomId).emit("answer", data);
+      socket.to(data.roomId).emit("answer", data.answer);
     });
 
     // ICE CANDIDATE
     socket.on("ice-candidate", (data) => {
-      socket.to(roomId).emit("ice-candidate", data);
+      socket.to(data.roomId).emit("ice-candidate", data.candidate);
     });
 
     // CHAT
