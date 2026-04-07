@@ -44,7 +44,7 @@ const VideoCall = () => {
 
     socketRef.current = io(socketUrl, {
       transports: ["websocket", "polling"],
-      withCredentials: true,
+      withCredentials: false,
     });
 
     socketRef.current.on("connect", async () => {
