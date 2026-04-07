@@ -26,6 +26,7 @@ const VideoCall = () => {
   const peerRef = useRef(null);
   const localStreamRef = useRef(null);
   const userIdRef = useRef(Math.random().toString(36).substring(2, 9));
+  const pendingCandidatesRef = useRef([]);
 
   const [isCallActive, setIsCallActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -33,10 +34,16 @@ const VideoCall = () => {
 
   // ---------------- SOCKET ----------------
   const initSocket = () => {
-    const socketUrl = import.meta.env.VITE_BACKEND_URL;
+    const socketUrl =
+      import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL;
+
+    if (!socketUrl) {
+      console.error("Missing VITE_BACKEND_URL or VITE_API_URL");
+      return;
+    }
 
     socketRef.current = io(socketUrl, {
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       withCredentials: true,
     });
 
@@ -51,6 +58,10 @@ const VideoCall = () => {
 
       // ALWAYS create peer
       await createPeer();
+    });
+
+    socketRef.current.on("connect_error", (err) => {
+      console.error("Socket connection error:", err.message);
     });
 
     socketRef.current.on("user-connected", async () => {
@@ -78,6 +89,7 @@ const VideoCall = () => {
       await peerRef.current.setRemoteDescription(
         new RTCSessionDescription(offer)
       );
+      await flushPendingCandidates();
 
       const answer = await peerRef.current.createAnswer();
       await peerRef.current.setLocalDescription(answer);
@@ -95,18 +107,33 @@ const VideoCall = () => {
       await peerRef.current.setRemoteDescription(
         new RTCSessionDescription(answer)
       );
+      await flushPendingCandidates();
     });
 
     socketRef.current.on("ice-candidate", async (candidate) => {
       try {
         if (!peerRef.current) return;
-        await peerRef.current.addIceCandidate(
-          new RTCIceCandidate(candidate)
-        );
+        if (!peerRef.current.remoteDescription) {
+          pendingCandidatesRef.current.push(candidate);
+          return;
+        }
+        await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
         console.error(err);
       }
     });
+  };
+
+  const flushPendingCandidates = async () => {
+    if (!peerRef.current || !peerRef.current.remoteDescription) return;
+    while (pendingCandidatesRef.current.length > 0) {
+      const candidate = pendingCandidatesRef.current.shift();
+      try {
+        await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (err) {
+        console.error("Failed to add queued ICE candidate:", err);
+      }
+    }
   };
 
   // ---------------- MEDIA ----------------
@@ -147,6 +174,7 @@ const VideoCall = () => {
     peerRef.current?.close();
     socketRef.current?.disconnect();
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    pendingCandidatesRef.current = [];
     setIsCallActive(false);
   };
 
